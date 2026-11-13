@@ -1,0 +1,1189 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>ChargerLink — Dodge Charger Cockpit &amp; Live GPS Telemetry</title>
+  <meta name="description" content="Dodge Charger custom speedometer cockpit, OpenStreetMap live GPS routing, and Firebase-synced Windows telemetry dashboard." />
+  <meta property="og:title" content="ChargerLink — Dodge Charger Cockpit &amp; Live GPS Telemetry" />
+  <meta property="og:description" content="Dodge Charger custom speedometer cockpit, OpenStreetMap live GPS routing, and Firebase-synced Windows telemetry dashboard." />
+  <meta property="og:type" content="website" />
+  <meta name="theme-color" content="#090A0D" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ChargerLink" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23090A0D'/%3E%3Ccircle cx='32' cy='32' r='22' fill='none' stroke='%23E11D2E' stroke-width='4'/%3E%3Cline x1='32' y1='32' x2='47' y2='18' stroke='%23FF2438' stroke-width='3.5' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='32' r='4' fill='%23E11D2E'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,700;1,800&family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root {
+      --font-display: "Barlow Condensed", sans-serif;
+      --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #090A0D;
+      color: #F4F4F5;
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding-bottom: 72px;
+      overflow-x: hidden;
+    }
+    @media (min-width: 768px) { body { padding-bottom: 24px; } }
+    .tabular { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .hidden { display: none !important; }
+
+    /* Top Bar (3-zone contract) */
+    header {
+      position: sticky; top: 0; z-index: 30;
+      border-bottom: 1px solid rgba(39, 39, 42, 0.9);
+      background: rgba(9, 10, 13, 0.92);
+      backdrop-filter: blur(12px);
+    }
+    .header-inner {
+      max-width: 1280px; margin: 0 auto; height: 64px;
+      padding: 0 20px; display: flex; align-items: center; justify-content: space-between; gap: 24px;
+    }
+    .brand {
+      background: none; border: none; color: #FFFFFF; cursor: pointer;
+      font-family: var(--font-display); font-size: 26px; font-weight: 800;
+      letter-spacing: 0.04em; white-space: nowrap; flex-shrink: 0;
+    }
+    .brand span { color: #E11D2E; }
+    .desktop-nav { display: none; align-items: center; gap: 24px; }
+    @media (min-width: 768px) { .desktop-nav { display: flex; } }
+    .nav-link {
+      background: none; border: none; border-bottom: 2px solid transparent;
+      color: #A1A1AA; font-size: 14px; font-weight: 500; padding: 6px 2px;
+      cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: color 0.15s;
+    }
+    .nav-link:hover { color: #F4F4F5; }
+    .nav-link.active { color: #FFFFFF; border-bottom-color: #E11D2E; }
+
+    /* Buttons & Inputs */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      min-height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid transparent;
+      font-family: var(--font-sans); font-size: 12px; font-weight: 600;
+      cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: background 0.15s, border-color 0.15s;
+    }
+    .btn-primary { background: #E11D2E; color: #FFFFFF; }
+    .btn-primary:hover { background: #C81827; }
+    .btn-secondary { background: #14171F; border-color: #2D323E; color: #E4E4E7; }
+    .btn-secondary:hover { background: #1E222D; }
+    .btn-light { background: #F4F4F5; color: #090A0D; }
+    .btn-light:hover { background: #FFFFFF; }
+    .btn:disabled { opacity: 0.42; cursor: not-allowed; }
+    input[type="text"], input[type="email"], input[type="password"] {
+      width: 100%; min-height: 42px; border-radius: 10px; border: 1px solid #272A34;
+      background: #090A0D; color: #F4F4F5; padding: 0 12px; font-size: 13px;
+      font-family: var(--font-sans);
+    }
+    input:focus { outline: none; border-color: #52525B; }
+
+    /* Layout */
+    main {
+      flex: 1; width: 100%; max-width: 1280px; margin: 0 auto;
+      padding: 20px 16px; display: flex; flex-direction: column; gap: 20px;
+    }
+    @media (min-width: 640px) { main { padding: 24px; } }
+    .grid-cockpit { display: grid; gap: 24px; align-items: start; }
+    @media (min-width: 1024px) { .grid-cockpit { grid-template-columns: 1fr 1fr; } }
+    .grid-windows { display: grid; gap: 24px; align-items: stretch; }
+    @media (min-width: 1024px) { .grid-windows { grid-template-columns: 7fr 5fr; } }
+
+    .panel {
+      background: #0E1015; border: 1px solid #27272A; border-radius: 16px;
+      padding: 20px; display: flex; flex-direction: column; gap: 16px;
+    }
+    .row-between { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+    .seg-group {
+      display: inline-flex; gap: 4px; padding: 4px; border-radius: 10px;
+      background: #090A0D; border: 1px solid #27272A;
+    }
+    .seg-btn {
+      min-height: 36px; padding: 0 13px; border-radius: 7px; border: none;
+      background: transparent; color: #A1A1AA; font-size: 12px; font-weight: 600;
+      cursor: pointer; white-space: nowrap; transition: background 0.15s, color 0.15s;
+    }
+    .seg-btn:hover { color: #F4F4F5; }
+    .seg-btn.active-red { background: #E11D2E; color: #FFFFFF; }
+    .seg-btn.active-light { background: #F4F4F5; color: #090A0D; }
+
+    .controls-3 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+    @media (min-width: 640px) { .controls-3 { grid-template-columns: 1fr 1fr 1fr; } }
+    .stats-4 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    @media (min-width: 640px) { .stats-4 { grid-template-columns: repeat(4, 1fr); } }
+    .stat-card {
+      background: #0E1015; border: 1px solid #27272A; border-radius: 12px; padding: 12px 14px;
+    }
+    .stat-label { font-size: 12px; color: #A1A1AA; }
+    .stat-val { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 18px; font-weight: 700; margin-top: 4px; }
+
+    /* Search & Map */
+    .search-wrap { position: relative; display: flex; gap: 8px; }
+    .dropdown {
+      position: absolute; left: 0; right: 0; top: 46px; z-index: 40;
+      background: #101218; border: 1px solid #3F3F46; border-radius: 12px; overflow: hidden;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.65);
+    }
+    .dropdown-item {
+      width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid #27272A;
+      color: #E4E4E7; padding: 10px 14px; font-size: 12px; cursor: pointer;
+    }
+    .dropdown-item:hover { background: #1F242D; }
+    .map-frame {
+      position: relative; width: 100%; height: 420px; border-radius: 12px;
+      overflow: hidden; border: 1px solid #27272A; background: #0B0D12;
+    }
+    @media (min-width: 1024px) { .map-frame.tall { height: 520px; } }
+    #map { width: 100%; height: 100%; z-index: 0; }
+    .leaflet-container { background: #0B0D12 !important; }
+    .map-hud-tl {
+      position: absolute; top: 12px; left: 12px; z-index: 10; pointer-events: none;
+      background: rgba(9, 10, 13, 0.88); border: 1px solid #27272A; border-radius: 8px;
+      padding: 6px 12px; font-size: 12px; display: flex; align-items: center; gap: 8px;
+      backdrop-filter: blur(8px);
+    }
+    .map-hud-tr { position: absolute; top: 12px; right: 12px; z-index: 10; display: flex; gap: 6px; }
+    .map-btn { min-height: 36px; padding: 0 10px; font-size: 12px; }
+
+    /* Simulator Box */
+    .sim-panel {
+      width: 100%; background: #090A0D; border: 1px solid #27272A;
+      border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px;
+    }
+
+    /* Tables & Code */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 12px 16px; border-bottom: 1px solid #27272A; text-align: left; }
+    th { font-size: 12px; color: #A1A1AA; background: #0C0E13; font-weight: 500; }
+    pre {
+      background: #08090C; padding: 16px; overflow-x: auto; max-height: 480px;
+      font-family: var(--font-mono); font-size: 12px; line-height: 1.55; color: #D4D4D8;
+    }
+
+    /* Mobile Bottom Nav (<=15% viewport height) */
+    .mobile-nav {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; height: 64px;
+      border-top: 1px solid #27272A; background: rgba(9, 10, 13, 0.96);
+      backdrop-filter: blur(12px); display: grid; grid-template-columns: repeat(4, 1fr);
+    }
+    @media (min-width: 768px) { .mobile-nav { display: none; } }
+    .mobile-tab {
+      background: none; border: none; color: #A1A1AA; font-size: 11px; font-weight: 600;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+      cursor: pointer;
+    }
+    .mobile-tab.active { color: #E11D2E; }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.78);
+      backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 16px;
+    }
+    .modal-card {
+      width: 100%; max-width: 420px; background: #101218; border: 1px solid #27272A;
+      border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 14px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <!-- 3-Zone Top Bar -->
+  <header>
+    <div class="header-inner">
+      <button type="button" class="brand" id="brand-btn">CHARGER<span>LINK</span></button>
+      <nav class="desktop-nav" aria-label="Primary Navigation">
+        <button type="button" class="nav-link active" data-view="cockpit">Cockpit</button>
+        <button type="button" class="nav-link" data-view="windows">Windows Map</button>
+        <button type="button" class="nav-link" data-view="trips">Trip Logs</button>
+        <button type="button" class="nav-link" data-view="android">Android Code</button>
+      </nav>
+      <button type="button" class="btn btn-primary" id="header-auth-btn">Sign In</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Email Verification Banner -->
+    <div id="verify-banner" class="panel hidden" style="border-color:#92400E;background:rgba(120,53,15,0.22);padding:14px 18px;">
+      <div class="row-between">
+        <span id="verify-banner-text" style="font-size:13px;color:#FDE68A;">
+          Verify your email address in your inbox before syncing telemetry to Firebase.
+        </span>
+        <div style="display:flex;gap:8px;">
+          <button type="button" id="verify-check-btn" class="btn btn-primary">I Verified</button>
+          <button type="button" id="verify-resend-btn" class="btn btn-secondary">Resend Email</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- COCKPIT & WINDOWS LIVE MAP VIEW -->
+    <div id="cockpit-windows-container" class="grid-cockpit">
+      <!-- Speedometer Column -->
+      <section class="panel" style="align-items:center;" id="speedo-panel">
+        <div class="row-between" style="width:100%;font-size:12px;color:#A1A1AA;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <strong id="veh-title" style="color:#F4F4F5;">2023 Charger SRT Hellcat</strong>
+            <span aria-hidden="true">·</span>
+            <span id="source-label">Standby</span>
+          </div>
+          <span id="sync-label" class="tabular">Local Preview</span>
+        </div>
+
+        <!-- Custom Dodge Charger SVG Speedometer -->
+        <svg id="charger-gauge" viewBox="0 0 440 440" style="width:100%;max-width:430px;filter:drop-shadow(0 24px 48px rgba(0,0,0,0.85));" role="img" aria-label="Dodge Charger Speedometer">
+          <defs>
+            <linearGradient id="chargerBezel" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#3F4451" />
+              <stop offset="30%" stop-color="#1B1E25" />
+              <stop offset="72%" stop-color="#101217" />
+              <stop offset="100%" stop-color="#2F3440" />
+            </linearGradient>
+            <radialGradient id="chargerDialBg" cx="50%" cy="46%" r="54%">
+              <stop offset="0%" stop-color="#14171F" />
+              <stop offset="65%" stop-color="#090B0F" />
+              <stop offset="100%" stop-color="#050608" />
+            </radialGradient>
+            <pattern id="carbonWeave" width="8" height="8" patternUnits="userSpaceOnUse">
+              <path d="M 0 4 L 4 0 L 8 4 L 4 8 Z" fill="rgba(255,255,255,0.02)" />
+            </pattern>
+            <filter id="crimsonGlow" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="3.5" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+          </defs>
+
+          <circle cx="220" cy="220" r="214" fill="url(#chargerBezel)" />
+          <circle cx="220" cy="220" r="204" fill="#07080B" stroke="#272A34" stroke-width="1.5" />
+          <circle cx="220" cy="220" r="196" fill="url(#chargerDialBg)" />
+          <circle cx="220" cy="220" r="196" fill="url(#carbonWeave)" />
+          <path id="arc-bg" d="" fill="none" stroke="#27272A" stroke-width="3" stroke-linecap="round" />
+          <path id="arc-fg" d="" fill="none" stroke="#E11D2E" stroke-width="4.5" stroke-linecap="round" filter="url(#crimsonGlow)" />
+          <path id="arc-redline" d="" fill="none" stroke="#E11D2E" stroke-width="2" opacity="0.65" />
+          <g id="gauge-ticks"></g>
+
+          <text x="220" y="134" text-anchor="middle" fill="#71717A" font-size="11" font-weight="700" letter-spacing="3.5" font-family="Barlow Condensed">CHARGER INSTRUMENT CLUSTER</text>
+          <text id="mode-text" x="220" y="152" text-anchor="middle" fill="#E11D2E" font-size="13" font-weight="700" letter-spacing="2.5" font-family="Barlow Condensed">TRACK MODE</text>
+
+          <rect x="130" y="264" width="180" height="110" rx="12" fill="#0B0D12" stroke="#272A34" stroke-width="1.5" />
+          <text id="evic-speed" x="220" y="315" text-anchor="middle" fill="#FFFFFF" font-size="56" font-weight="800" font-family="Barlow Condensed">0</text>
+          <text id="evic-unit" x="220" y="335" text-anchor="middle" fill="#FB7185" font-size="12" font-weight="700" letter-spacing="2.5" font-family="JetBrains Mono">MPH</text>
+          <line x1="146" y1="345" x2="294" y2="345" stroke="#1F242D" stroke-width="1" />
+          <text id="evic-gear" x="156" y="362" text-anchor="start" fill="#E11D2E" font-size="13" font-weight="700" font-family="JetBrains Mono">G:P</text>
+          <text id="evic-peak" x="220" y="362" text-anchor="middle" fill="#A1A1AA" font-size="11" font-weight="600" font-family="JetBrains Mono">PK 0</text>
+          <text id="evic-dist" x="284" y="362" text-anchor="end" fill="#A1A1AA" font-size="11" font-weight="600" font-family="JetBrains Mono">0.0mi</text>
+
+          <rect x="148" y="384" width="144" height="5" rx="2.5" fill="#181B22" />
+          <rect id="rpm-bar" x="148" y="384" width="14" height="5" rx="2.5" fill="#E11D2E" />
+          <text id="evic-rpm" x="220" y="404" text-anchor="middle" fill="#71717A" font-size="10.5" font-weight="600" font-family="JetBrains Mono">780 RPM · N 0°</text>
+
+          <g id="needle-group" transform="rotate(-135 220 220)" filter="url(#crimsonGlow)">
+            <polygon points="220,55 213.5,220 220,254 226.5,220" fill="#FF2438" />
+            <line x1="220" y1="254" x2="220" y2="55" stroke="#FF8A95" stroke-width="1.2" opacity="0.75" />
+          </g>
+          <circle cx="220" cy="220" r="24" fill="#181B22" stroke="#3F4451" stroke-width="2.5" />
+          <circle cx="220" cy="220" r="14" fill="#0B0D12" stroke="#272A34" stroke-width="1.5" />
+          <circle id="hub-led" cx="220" cy="220" r="5" fill="#52525B" />
+        </svg>
+
+        <!-- Cockpit Controls -->
+        <div id="cockpit-controls" style="width:100%;display:flex;flex-direction:column;gap:12px;">
+          <div class="row-between">
+            <div class="seg-group" aria-label="Drive Mode">
+              <button type="button" class="seg-btn" data-mode="street">Street</button>
+              <button type="button" class="seg-btn" data-mode="sport">Sport</button>
+              <button type="button" class="seg-btn active-red" data-mode="track">Track</button>
+            </div>
+            <div class="seg-group" aria-label="Speed Unit">
+              <button type="button" class="seg-btn active-light" data-unit="mph">MPH</button>
+              <button type="button" class="seg-btn" data-unit="kmh">KM/H</button>
+            </div>
+          </div>
+
+          <div class="controls-3">
+            <button type="button" id="gps-btn" class="btn btn-primary">Start Live GPS</button>
+            <button type="button" id="sim-btn" class="btn btn-secondary">Test Drive</button>
+            <button type="button" id="stop-btn" class="btn btn-secondary" disabled>Stop</button>
+          </div>
+
+          <div id="sim-panel" class="sim-panel hidden">
+            <div class="row-between" style="font-size:12px;">
+              <span style="color:#D4D4D8;">Test Throttle Target</span>
+              <span id="sim-target-text" class="tabular" style="color:#FB7185;font-weight:700;">65 MPH</span>
+            </div>
+            <input id="sim-slider" type="range" min="0" max="200" value="65" style="width:100%;accent-color:#E11D2E;cursor:pointer;" />
+            <div style="display:flex;gap:8px;">
+              <button type="button" class="btn btn-secondary sim-preset" data-speed="0" style="flex:1;min-height:34px;">0</button>
+              <button type="button" class="btn btn-secondary sim-preset" data-speed="45" style="flex:1;min-height:34px;">45</button>
+              <button type="button" class="btn btn-secondary sim-preset" data-speed="75" style="flex:1;min-height:34px;">75</button>
+              <button type="button" class="btn btn-secondary sim-preset" data-speed="120" style="flex:1;min-height:34px;">120</button>
+              <button type="button" class="btn btn-secondary sim-preset" data-speed="165" style="flex:1;min-height:34px;">165</button>
+            </div>
+          </div>
+
+          <div id="gps-error" class="hidden" style="border-radius:10px;border:1px solid #92400E;background:rgba(120,53,15,0.25);padding:10px 12px;font-size:12px;color:#FDE68A;"></div>
+
+          <div class="row-between" style="border-top:1px solid #27272A;padding-top:12px;">
+            <div style="display:flex;gap:8px;flex:1;min-width:220px;">
+              <input id="trip-label-input" type="text" value="Evening Run" maxlength="60" placeholder="Trip label" />
+              <button type="button" id="save-trip-btn" class="btn btn-secondary" disabled>Save Trip</button>
+              <button type="button" id="reset-trip-btn" class="btn btn-secondary" title="Reset Trip">Reset</button>
+            </div>
+            <button type="button" id="pwa-install-btn" class="btn btn-light hidden">Install Android App</button>
+          </div>
+          <div id="save-notice" class="hidden" style="font-size:12px;color:#34D399;font-weight:500;"></div>
+        </div>
+      </section>
+
+      <!-- Map & Stats Column -->
+      <section style="display:flex;flex-direction:column;gap:16px;" id="map-panel">
+        <div class="search-wrap">
+          <input id="dest-input" type="text" placeholder="Search destination on OpenStreetMap..." aria-label="Search destination" />
+          <button type="button" id="dest-btn" class="btn btn-primary">Go To</button>
+          <div id="dest-dropdown" class="dropdown hidden"></div>
+        </div>
+
+        <div id="route-banner" class="hidden" style="border-radius:10px;border:1px solid #075985;background:rgba(12,74,110,0.3);padding:10px 14px;font-size:12px;color:#E0F2FE;">
+          <div class="row-between">
+            <span id="route-info">Route</span>
+            <button type="button" id="route-clear-btn" class="btn btn-secondary" style="min-height:30px;padding:0 10px;">Clear</button>
+          </div>
+        </div>
+
+        <div class="map-frame" id="map-frame">
+          <div id="map"></div>
+          <div class="map-hud-tl">
+            <span id="map-title" style="font-weight:600;">OpenStreetMap GPS</span>
+            <span style="color:#52525B;" aria-hidden="true">·</span>
+            <span id="map-coords" class="tabular" style="color:#A1A1AA;">34.0522, -118.2437</span>
+            <span style="color:#52525B;" aria-hidden="true">·</span>
+            <span id="map-speed" class="tabular">0 MPH</span>
+          </div>
+          <div class="map-hud-tr">
+            <button type="button" id="layer-toggle-btn" class="btn btn-secondary map-btn">OSM</button>
+            <button type="button" id="locate-me-btn" class="btn btn-secondary map-btn">Locate</button>
+            <button type="button" id="follow-btn" class="btn btn-primary map-btn">Following</button>
+          </div>
+        </div>
+
+        <div class="stats-4">
+          <div class="stat-card"><div class="stat-label">Engine RPM</div><div id="stat-rpm" class="stat-val">780</div></div>
+          <div class="stat-card"><div class="stat-label">Peak Speed</div><div id="stat-peak" class="stat-val">0 MPH</div></div>
+          <div class="stat-card"><div class="stat-label">Trip Distance</div><div id="stat-dist" class="stat-val">0.00 mi</div></div>
+          <div class="stat-card"><div class="stat-label">Heading</div><div id="stat-head" class="stat-val">0°</div></div>
+        </div>
+
+        <div id="connect-cta" class="panel" style="padding:14px 16px;">
+          <div class="row-between">
+            <span style="font-size:12px;color:#D4D4D8;max-width:440px;line-height:1.5;">
+              Sign in with Email &amp; Password (or Google) on your Android phone and Windows PC to stream live speed and GPS location through Firebase.
+            </span>
+            <button type="button" id="connect-cta-btn" class="btn btn-primary">Connect Firebase</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- TRIP LOGS VIEW -->
+    <section id="trips-view" class="panel hidden" style="padding:0;overflow:hidden;">
+      <div class="row-between" style="padding:16px 20px;border-bottom:1px solid #27272A;">
+        <h2 style="font-size:16px;font-weight:600;">Saved Drive Sessions</h2>
+        <span id="trips-count" class="tabular" style="font-size:12px;color:#A1A1AA;">0 recorded</span>
+      </div>
+      <div id="trips-empty" style="padding:36px 20px;text-align:center;font-size:13px;color:#A1A1AA;">
+        Sign in with a verified account and save a drive session from Cockpit to view trip logs here.
+      </div>
+      <div id="trips-table-wrap" class="hidden" style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Trip</th><th>Mode</th><th>Peak Speed</th><th>Distance</th><th>Duration</th><th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="trips-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ANDROID KOTLIN SOURCE VIEW (OPTIONAL NATIVE REFERENCE) -->
+    <section id="android-view" class="panel hidden" style="padding:0;overflow:hidden;">
+      <div class="row-between" style="padding:14px 20px;border-bottom:1px solid #27272A;background:#0C0E13;">
+        <div>
+          <h2 style="font-size:15px;font-weight:600;">Optional Native Android Studio Kotlin Code (OSMdroid + Compose)</h2>
+          <p style="font-size:12px;color:#A1A1AA;margin-top:2px;">Use this if you also want a native Android APK, or install this HTML page directly from Chrome on Android.</p>
+        </div>
+        <button type="button" id="copy-kotlin-btn" class="btn btn-light">Copy Kotlin</button>
+      </div>
+      <pre id="kotlin-code-block"></pre>
+    </section>
+  </main>
+
+  <!-- Mobile Thumb Bottom Bar -->
+  <nav class="mobile-nav" aria-label="Mobile Navigation">
+    <button type="button" class="mobile-tab active" data-view="cockpit">Cockpit</button>
+    <button type="button" class="mobile-tab" data-view="windows">Windows</button>
+    <button type="button" class="mobile-tab" data-view="trips">Trips</button>
+    <button type="button" class="mobile-tab" data-view="android">Android</button>
+  </nav>
+
+  <!-- Auth Modal (Email/Password + Google) -->
+  <div id="auth-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="row-between">
+        <strong id="auth-modal-title" style="font-size:17px;">Sign in to ChargerLink</strong>
+        <button type="button" id="auth-close-btn" class="btn btn-secondary" style="min-height:34px;padding:0 12px;">Close</button>
+      </div>
+      <div class="seg-group" style="display:grid;grid-template-columns:1fr 1fr;width:100%;">
+        <button type="button" id="auth-tab-signin" class="seg-btn active-light">Sign In</button>
+        <button type="button" id="auth-tab-signup" class="seg-btn">Create Account</button>
+      </div>
+      <form id="auth-form" style="display:flex;flex-direction:column;gap:10px;">
+        <input id="auth-email" type="email" required placeholder="driver@example.com" />
+        <input id="auth-password" type="password" required minlength="6" placeholder="Password (min 6 characters)" />
+        <div id="auth-error-msg" class="hidden" style="font-size:12px;color:#FCA5A5;"></div>
+        <div id="auth-info-msg" class="hidden" style="font-size:12px;color:#34D399;"></div>
+        <button type="submit" id="auth-submit-btn" class="btn btn-primary" style="width:100%;min-height:44px;">Sign In with Email</button>
+      </form>
+      <div style="text-align:center;font-size:11px;color:#71717A;">or</div>
+      <button type="button" id="auth-google-btn" class="btn btn-secondary" style="width:100%;min-height:42px;">Continue with Google</button>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js";
+    import {
+      getAuth, GoogleAuthProvider, signInWithPopup, signOut,
+      signInWithEmailAndPassword, createUserWithEmailAndPassword,
+      sendEmailVerification, reload, onAuthStateChanged
+    } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-auth.js";
+    import {
+      getFirestore, doc, getDocFromServer, setDoc, updateDoc, deleteDoc,
+      collection, query, orderBy, limit, onSnapshot, serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      projectId: "gen-lang-client-0308103506",
+      appId: "1:411178277976:web:50ae54cb12605c3be73e2d",
+      apiKey: "AIzaSyBfLKdtFgYoAVATUcbezr0xY2n4SF7uE7M",
+      authDomain: "gen-lang-client-0308103506.firebaseapp.com",
+      firestoreDatabaseId: "ai-studio-6cb63ac0-7479-41a5-ac43-367fed264752",
+      storageBucket: "gen-lang-client-0308103506.firebasestorage.app",
+      messagingSenderId: "411178277976"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    const googleProvider = new GoogleAuthProvider();
+    googleProvider.setCustomParameters({ prompt: "select_account" });
+
+    // Mandatory boot connection check
+    (async () => {
+      try {
+        await getDocFromServer(doc(db, "test", "connection"));
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("the client is offline")) {
+          console.error("Please check your Firebase configuration.");
+        }
+      }
+    })();
+
+    function handleFirestoreError(error, operationType, path) {
+      const errInfo = {
+        error: error instanceof Error ? error.message : String(error),
+        operationType,
+        path,
+        authInfo: {
+          userId: auth.currentUser?.uid || null,
+          email: auth.currentUser?.email || null,
+          emailVerified: auth.currentUser?.emailVerified ?? null
+        }
+      };
+      console.error("Firestore Error:", JSON.stringify(errInfo));
+    }
+
+    // Application State
+    const state = {
+      view: "cockpit",
+      authMode: "signin",
+      user: null,
+      vehicleExists: false,
+      mode: "track",
+      unit: "mph",
+      speedMph: 0,
+      targetSpeedMph: 0,
+      displaySpeedMph: 0,
+      rpm: 780,
+      displayRpm: 780,
+      peakSpeedMph: 0,
+      tripDistanceMiles: 0,
+      lat: 34.052235,
+      lng: -118.243683,
+      heading: 0,
+      isTracking: false,
+      sourceMode: "idle",
+      targetSimSpeed: 65,
+      simAngle: 0,
+      routePoints: [{ lat: 34.052235, lng: -118.243683 }],
+      follow: true,
+      mapStyle: "osm",
+      gpsWatchId: null,
+      simTimerId: null,
+      wakeLock: null,
+      lastSyncMs: 0,
+      tripStartTime: null,
+      prevGps: null,
+      remoteTelemetry: null
+    };
+
+    const MODE_META = {
+      street: { color: "#E2E8F0", label: "STREET MODE" },
+      sport: { color: "#F97316", label: "SPORT MODE" },
+      track: { color: "#E11D2E", label: "TRACK MODE" }
+    };
+
+    function polar(cx, cy, r, deg) {
+      const rad = ((deg - 90) * Math.PI) / 180;
+      return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+    }
+    function describeArc(cx, cy, r, a1, a2) {
+      const s = polar(cx, cy, r, a2), e = polar(cx, cy, r, a1);
+      const large = a2 - a1 <= 180 ? "0" : "1";
+      return `M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 0 ${e.x} ${e.y}`;
+    }
+
+    document.getElementById("arc-bg").setAttribute("d", describeArc(220, 220, 186, 225, 495));
+    document.getElementById("arc-redline").setAttribute("d", describeArc(220, 220, 180, 225 + 270 * 0.8, 495));
+
+    const ticksGroup = document.getElementById("gauge-ticks");
+    function renderDialScale() {
+      ticksGroup.innerHTML = "";
+      const maxVal = state.unit === "mph" ? 200 : 320;
+      const major = state.unit === "mph" ? 20 : 40;
+      const step = state.unit === "mph" ? 2 : 4;
+      for (let v = 0; v <= maxVal; v += step) {
+        const frac = v / maxVal;
+        const deg = 225 + frac * 270;
+        const isMaj = v % major === 0;
+        const isMid = !isMaj && v % (major / 2) === 0;
+        const isRed = frac >= 0.8;
+        const p1 = polar(220, 220, isMaj ? 156 : isMid ? 164 : 170, deg);
+        const p2 = polar(220, 220, 178, deg);
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", p1.x); line.setAttribute("y1", p1.y);
+        line.setAttribute("x2", p2.x); line.setAttribute("y2", p2.y);
+        line.setAttribute("stroke", isRed ? "#E11D2E" : isMaj ? "#F4F4F5" : "#71717A");
+        line.setAttribute("stroke-width", isMaj ? "3" : isMid ? "2" : "1.1");
+        line.setAttribute("stroke-linecap", "round");
+        line.setAttribute("opacity", isMaj ? "0.96" : isMid ? "0.78" : "0.45");
+        ticksGroup.appendChild(line);
+
+        if (isMaj) {
+          const lp = polar(220, 220, 132, deg);
+          const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          txt.setAttribute("x", lp.x); txt.setAttribute("y", lp.y);
+          txt.setAttribute("text-anchor", "middle"); txt.setAttribute("dominant-baseline", "central");
+          txt.setAttribute("fill", isRed ? "#FB7185" : "#F4F4F5");
+          txt.setAttribute("font-size", "21"); txt.setAttribute("font-weight", "800");
+          txt.setAttribute("font-style", "italic"); txt.setAttribute("font-family", "Barlow Condensed");
+          txt.textContent = String(v);
+          ticksGroup.appendChild(txt);
+        }
+      }
+    }
+    renderDialScale();
+
+    function compassLabel(deg) {
+      const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+      return dirs[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+    }
+    function computeGear(mph) {
+      if (mph < 0.8) return "P";
+      const tops = [22, 42, 66, 94, 124, 152, 178];
+      const idx = tops.findIndex((t) => mph < t);
+      return idx === -1 ? "8" : String(idx + 1);
+    }
+    function estimateRpm(mph) {
+      if (mph < 0.8) return 780;
+      const tops = [24, 45, 68, 96, 126, 154, 180, 205];
+      const lows = [0, 14, 30, 50, 74, 102, 130, 158];
+      let idx = tops.findIndex((t) => mph <= t);
+      if (idx === -1) idx = tops.length - 1;
+      const frac = Math.min(1, Math.max(0, (mph - lows[idx]) / Math.max(1, tops[idx] - lows[idx])));
+      return Math.round(1800 + frac * 4600);
+    }
+    function haversineMiles(lat1, lon1, lat2, lon2) {
+      const R = 3958.8;
+      const dLat = ((lat2 - lat1) * Math.PI) / 180;
+      const dLon = ((lon2 - lon1) * Math.PI) / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+      return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+    }
+
+    // 60fps smooth needle loop
+    function animationTick() {
+      const activeData = (state.view === "windows" && state.sourceMode === "idle" && state.remoteTelemetry)
+        ? state.remoteTelemetry
+        : state;
+      state.displaySpeedMph += (activeData.speedMph - state.displaySpeedMph) * 0.16;
+      state.displayRpm += (activeData.rpm - state.displayRpm) * 0.18;
+
+      const mult = state.unit === "mph" ? 1 : 1.60934;
+      const maxVal = state.unit === "mph" ? 200 : 320;
+      const shown = state.displaySpeedMph * mult;
+      const frac = Math.min(1, Math.max(0, shown / maxVal));
+      const modeInfo = MODE_META[activeData.mode || activeData.driveMode || "track"] || MODE_META.track;
+
+      document.getElementById("needle-group").setAttribute("transform", `rotate(${-135 + frac * 270} 220 220)`);
+      document.getElementById("arc-fg").setAttribute("stroke", modeInfo.color);
+      document.getElementById("arc-fg").setAttribute("d", frac > 0.005 ? describeArc(220, 220, 186, 225, 225 + frac * 270) : "");
+      document.getElementById("mode-text").textContent = modeInfo.label;
+      document.getElementById("mode-text").setAttribute("fill", modeInfo.color);
+      document.getElementById("evic-speed").textContent = String(Math.round(shown));
+      document.getElementById("evic-unit").textContent = state.unit.toUpperCase();
+      document.getElementById("evic-gear").textContent = "G:" + computeGear(state.displaySpeedMph);
+      document.getElementById("evic-peak").textContent = "PK " + Math.round((activeData.peakSpeedMph || 0) * mult);
+      document.getElementById("evic-dist").textContent = ((activeData.tripDistanceMiles || 0) * mult).toFixed(1) + (state.unit === "mph" ? "mi" : "km");
+      document.getElementById("rpm-bar").setAttribute("width", String(Math.max(4, Math.min(144, (state.displayRpm / 7000) * 144))));
+      document.getElementById("evic-rpm").textContent = `${Math.round(state.displayRpm)} RPM · ${compassLabel(activeData.heading || 0)} ${Math.round(activeData.heading || 0)}°`;
+      document.getElementById("hub-led").setAttribute("fill", activeData.isTracking ? "#E11D2E" : "#52525B");
+
+      document.getElementById("stat-rpm").textContent = String(Math.round(state.displayRpm));
+      document.getElementById("stat-peak").textContent = `${Math.round((activeData.peakSpeedMph || 0) * mult)} ${state.unit.toUpperCase()}`;
+      document.getElementById("stat-dist").textContent = `${((activeData.tripDistanceMiles || 0) * mult).toFixed(2)} ${state.unit === "mph" ? "mi" : "km"}`;
+      document.getElementById("stat-head").textContent = `${Math.round(activeData.heading || 0)}°`;
+      document.getElementById("map-speed").textContent = `${Math.round(shown)} ${state.unit.toUpperCase()}`;
+      document.getElementById("map-coords").textContent = `${(activeData.lat ?? activeData.latitude).toFixed(4)}, ${(activeData.lng ?? activeData.longitude).toFixed(4)}`;
+
+      requestAnimationFrame(animationTick);
+    }
+    requestAnimationFrame(animationTick);
+
+    // Leaflet + OpenStreetMap Map
+    const map = L.map("map", { center: [state.lat, state.lng], zoom: 15, zoomControl: false });
+    let tileLayer = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
+      maxZoom: 19
+    }).addTo(map);
+    L.control.zoom({ position: "bottomright" }).addTo(map);
+
+    const arrowIcon = L.divIcon({
+      className: "charger-marker",
+      html: `<div id="charger-arrow" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="14" fill="rgba(225,29,46,0.25)"/><path d="M16 4L25 26L16 21L7 26L16 4Z" fill="#E11D2E" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round"/></svg></div>`,
+      iconSize: [36, 36], iconAnchor: [18, 18]
+    });
+    const vehMarker = L.marker([state.lat, state.lng], { icon: arrowIcon }).addTo(map);
+    const trailLine = L.polyline([], { color: "#E11D2E", weight: 4, opacity: 0.9 }).addTo(map);
+    const routeLine = L.polyline([], { color: "#38BDF8", weight: 5, dashArray: "8 6" }).addTo(map);
+    let destMarker = null;
+
+    map.on("dragstart", () => {
+      state.follow = false;
+      const fb = document.getElementById("follow-btn");
+      fb.textContent = "Follow"; fb.className = "btn btn-secondary map-btn";
+    });
+
+    function updateMapPosition(lat, lng, heading) {
+      vehMarker.setLatLng([lat, lng]);
+      const arrow = vehMarker.getElement()?.querySelector("#charger-arrow");
+      if (arrow) arrow.style.transform = `rotate(${heading}deg)`;
+      trailLine.setLatLngs(state.routePoints.slice(-120).map((p) => [p.lat, p.lng]));
+      if (state.follow) map.panTo([lat, lng], { animate: true, duration: 0.4 });
+    }
+
+    document.getElementById("layer-toggle-btn").onclick = () => {
+      state.mapStyle = state.mapStyle === "osm" ? "dark" : "osm";
+      map.removeLayer(tileLayer);
+      tileLayer = L.tileLayer(
+        state.mapStyle === "osm"
+          ? "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          : "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        { maxZoom: 19 }
+      ).addTo(map);
+      document.getElementById("layer-toggle-btn").textContent = state.mapStyle === "osm" ? "OSM" : "Dark";
+    };
+
+    document.getElementById("follow-btn").onclick = () => {
+      state.follow = true;
+      const fb = document.getElementById("follow-btn");
+      fb.textContent = "Following"; fb.className = "btn btn-primary map-btn";
+      map.setView([state.lat, state.lng], 16, { animate: true });
+    };
+
+    document.getElementById("locate-me-btn").onclick = () => {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition((pos) => {
+        state.follow = false;
+        map.setView([pos.coords.latitude, pos.coords.longitude], 15, { animate: true });
+      });
+    };
+
+    // OpenStreetMap Nominatim + OSRM Routing
+    document.getElementById("dest-btn").onclick = async () => {
+      const q = document.getElementById("dest-input").value.trim();
+      if (!q) return;
+      const box = document.getElementById("dest-dropdown");
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(q)}`);
+      const items = await res.json();
+      box.innerHTML = "";
+      box.classList.toggle("hidden", items.length === 0);
+      items.forEach((item) => {
+        const btn = document.createElement("button");
+        btn.type = "button"; btn.className = "dropdown-item"; btn.textContent = item.display_name;
+        btn.onclick = async () => {
+          box.classList.add("hidden");
+          const dLat = Number(item.lat), dLng = Number(item.lon);
+          if (destMarker) map.removeLayer(destMarker);
+          destMarker = L.circleMarker([dLat, dLng], { radius: 8, color: "#fff", weight: 2, fillColor: "#38BDF8", fillOpacity: 1 }).addTo(map);
+          try {
+            const rRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${state.lng},${state.lat};${dLng},${dLat}?overview=full&geometries=geojson`);
+            const rData = await rRes.json();
+            const rt = rData.routes?.[0];
+            if (rt?.geometry?.coordinates?.length) {
+              routeLine.setLatLngs(rt.geometry.coordinates.map(([lng, lat]) => [lat, lng]));
+              state.follow = false;
+              map.fitBounds(routeLine.getBounds(), { padding: [40, 40] });
+              document.getElementById("route-info").textContent = `Route to ${item.display_name.split(",")[0]} · ${(rt.distance * 0.000621371).toFixed(1)} mi (${Math.max(1, Math.round(rt.duration / 60))} min)`;
+              document.getElementById("route-banner").classList.remove("hidden");
+              return;
+            }
+          } catch {}
+          routeLine.setLatLngs([[state.lat, state.lng], [dLat, dLng]]);
+          map.fitBounds(routeLine.getBounds(), { padding: [40, 40] });
+        };
+        box.appendChild(btn);
+      });
+    };
+    document.getElementById("route-clear-btn").onclick = () => {
+      routeLine.setLatLngs([]);
+      if (destMarker) { map.removeLayer(destMarker); destMarker = null; }
+      document.getElementById("route-banner").classList.add("hidden");
+    };
+
+    // Firestore Sync
+    async function syncFirestore(force = false) {
+      if (!state.user || !state.user.emailVerified) return;
+      const now = Date.now();
+      if (!force && now - state.lastSyncMs < 1100) return;
+      state.lastSyncMs = now;
+      const path = `users/${state.user.uid}/vehicles/charger-01`;
+      const ref = doc(db, "users", state.user.uid, "vehicles", "charger-01");
+      const base = {
+        ownerId: state.user.uid,
+        vehicleName: "2023 Charger SRT Hellcat",
+        driveMode: state.mode,
+        unit: state.unit,
+        speedMph: Math.min(250, Math.max(0, Number(state.speedMph.toFixed(1)))),
+        rpm: Math.min(8000, Math.max(0, Math.round(state.rpm))),
+        latitude: Math.min(90, Math.max(-90, state.lat)),
+        longitude: Math.min(180, Math.max(-180, state.lng)),
+        heading: Math.min(360, Math.max(0, Math.round(state.heading))),
+        altitudeMeters: 85,
+        accuracyMeters: 5,
+        peakSpeedMph: Math.min(250, Math.max(0, Number(state.peakSpeedMph.toFixed(1)))),
+        tripDistanceMiles: Math.min(100000, Math.max(0, Number(state.tripDistanceMiles.toFixed(3)))),
+        isTracking: state.isTracking,
+        sourceDevice: state.sourceMode === "gps" ? "android-gps" : "charger-sim",
+        updatedAt: serverTimestamp()
+      };
+      try {
+        if (!state.vehicleExists) {
+          await setDoc(ref, { ...base, createdAt: serverTimestamp() });
+          state.vehicleExists = true;
+        } else {
+          await updateDoc(ref, base);
+        }
+        document.getElementById("sync-label").textContent = "Synced " + new Date().toLocaleTimeString();
+      } catch (err) {
+        handleFirestoreError(err, state.vehicleExists ? "update" : "create", path);
+      }
+    }
+
+    function stopAll() {
+      if (state.gpsWatchId !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(state.gpsWatchId);
+        state.gpsWatchId = null;
+      }
+      if (state.simTimerId !== null) {
+        clearInterval(state.simTimerId);
+        state.simTimerId = null;
+      }
+      if (state.wakeLock) {
+        state.wakeLock.release().catch(() => {});
+        state.wakeLock = null;
+      }
+      state.sourceMode = "idle";
+      state.isTracking = false;
+      state.speedMph = 0;
+      state.rpm = 780;
+      document.getElementById("source-label").textContent = "Standby";
+      document.getElementById("sim-panel").classList.add("hidden");
+      document.getElementById("stop-btn").disabled = true;
+      document.getElementById("gps-btn").textContent = "Start Live GPS";
+      document.getElementById("sim-btn").textContent = "Test Drive";
+      syncFirestore(true);
+    }
+
+    document.getElementById("gps-btn").onclick = async () => {
+      stopAll();
+      const errBox = document.getElementById("gps-error");
+      errBox.classList.add("hidden");
+      if (!navigator.geolocation) {
+        errBox.textContent = "Geolocation is not supported on this browser. Try Test Drive mode.";
+        errBox.classList.remove("hidden");
+        return;
+      }
+      try { if (navigator.wakeLock) state.wakeLock = await navigator.wakeLock.request("screen"); } catch {}
+      state.sourceMode = "gps";
+      state.isTracking = true;
+      state.tripStartTime = Date.now();
+      state.prevGps = null;
+      document.getElementById("source-label").textContent = "Android GPS Active";
+      document.getElementById("gps-btn").textContent = "GPS Streaming";
+      document.getElementById("stop-btn").disabled = false;
+
+      state.gpsWatchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude, longitude, speed, heading } = pos.coords;
+          const now = pos.timestamp || Date.now();
+          let mph = typeof speed === "number" && speed >= 0 ? speed * 2.23694 : 0;
+          if (state.prevGps) {
+            const dist = haversineMiles(state.prevGps.lat, state.prevGps.lng, latitude, longitude);
+            state.tripDistanceMiles += dist;
+            if ((!speed || speed < 0) && dist > 0.0005) {
+              mph = Math.min(200, dist / Math.max(0.0001, (now - state.prevGps.time) / 3600000));
+            }
+          }
+          state.prevGps = { lat: latitude, lng: longitude, time: now };
+          state.speedMph = mph;
+          state.rpm = estimateRpm(mph);
+          state.lat = latitude;
+          state.lng = longitude;
+          if (typeof heading === "number" && !Number.isNaN(heading)) state.heading = heading;
+          state.peakSpeedMph = Math.max(state.peakSpeedMph, mph);
+          state.routePoints.push({ lat: latitude, lng: longitude });
+          updateMapPosition(latitude, longitude, state.heading);
+          syncFirestore();
+        },
+        (err) => {
+          errBox.textContent = err.message || "Location permission denied.";
+          errBox.classList.remove("hidden");
+          stopAll();
+        },
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+      );
+    };
+
+    document.getElementById("sim-btn").onclick = () => {
+      stopAll();
+      state.sourceMode = "simulator";
+      state.isTracking = true;
+      state.tripStartTime = Date.now();
+      document.getElementById("source-label").textContent = "Test Drive Active";
+      document.getElementById("sim-btn").textContent = "Simulating";
+      document.getElementById("sim-panel").classList.remove("hidden");
+      document.getElementById("stop-btn").disabled = false;
+
+      state.simTimerId = setInterval(() => {
+        const diff = state.targetSimSpeed - state.speedMph;
+        const delta = diff > 0 ? Math.min(diff, 4.2) : Math.max(diff, -5.5);
+        state.speedMph = Math.max(0, Math.min(200, state.speedMph + delta));
+        state.rpm = estimateRpm(state.speedMph);
+        state.peakSpeedMph = Math.max(state.peakSpeedMph, state.speedMph);
+        const step = state.speedMph * (0.25 / 3600);
+        state.tripDistanceMiles += step;
+        state.simAngle = (state.simAngle + 1.4) % 360;
+        state.heading = (72 + Math.sin((state.simAngle * Math.PI) / 180) * 28 + 360) % 360;
+        const rad = (state.heading * Math.PI) / 180;
+        state.lat += (step / 69) * Math.cos(rad);
+        state.lng += (step / (69 * Math.cos((state.lat * Math.PI) / 180))) * Math.sin(rad);
+        state.routePoints.push({ lat: state.lat, lng: state.lng });
+        updateMapPosition(state.lat, state.lng, state.heading);
+        syncFirestore();
+      }, 250);
+    };
+
+    document.getElementById("stop-btn").onclick = stopAll;
+    document.getElementById("sim-slider").oninput = (e) => {
+      state.targetSimSpeed = Number(e.target.value);
+      document.getElementById("sim-target-text").textContent = `${state.targetSimSpeed} MPH`;
+    };
+    document.querySelectorAll(".sim-preset").forEach((btn) => {
+      btn.onclick = () => {
+        state.targetSimSpeed = Number(btn.dataset.speed);
+        document.getElementById("sim-slider").value = state.targetSimSpeed;
+        document.getElementById("sim-target-text").textContent = `${state.targetSimSpeed} MPH`;
+      };
+    });
+
+    document.querySelectorAll("[data-mode]").forEach((btn) => {
+      btn.onclick = () => {
+        state.mode = btn.dataset.mode;
+        document.querySelectorAll("[data-mode]").forEach((b) => b.classList.toggle("active-red", b === btn));
+        syncFirestore(true);
+      };
+    });
+    document.querySelectorAll("[data-unit]").forEach((btn) => {
+      btn.onclick = () => {
+        state.unit = btn.dataset.unit;
+        document.querySelectorAll("[data-unit]").forEach((b) => b.classList.toggle("active-light", b === btn));
+        renderDialScale();
+        syncFirestore(true);
+      };
+    });
+
+    document.getElementById("reset-trip-btn").onclick = () => {
+      state.peakSpeedMph = 0;
+      state.tripDistanceMiles = 0;
+      state.routePoints = [{ lat: state.lat, lng: state.lng }];
+      trailLine.setLatLngs([]);
+      syncFirestore(true);
+    };
+
+    document.getElementById("save-trip-btn").onclick = async () => {
+      if (!state.user || !state.user.emailVerified) return;
+      const tripId = `trip-${Date.now()}`;
+      const path = `users/${state.user.uid}/vehicles/charger-01/trips/${tripId}`;
+      try {
+        if (!state.vehicleExists) await syncFirestore(true);
+        await setDoc(doc(db, "users", state.user.uid, "vehicles", "charger-01", "trips", tripId), {
+          ownerId: state.user.uid,
+          vehicleId: "charger-01",
+          label: (document.getElementById("trip-label-input").value || "Charger Drive").slice(0, 80),
+          driveMode: state.mode,
+          maxSpeedMph: Number(state.peakSpeedMph.toFixed(1)),
+          avgSpeedMph: Number(state.speedMph.toFixed(1)),
+          distanceMiles: Number(state.tripDistanceMiles.toFixed(2)),
+          durationSeconds: state.tripStartTime ? Math.max(1, Math.round((Date.now() - state.tripStartTime) / 1000)) : 60,
+          startLat: state.routePoints[0]?.lat || state.lat,
+          startLng: state.routePoints[0]?.lng || state.lng,
+          endLat: state.lat,
+          endLng: state.lng,
+          routePoints: state.routePoints.slice(-55),
+          createdAt: serverTimestamp()
+        });
+        const notice = document.getElementById("save-notice");
+        notice.textContent = "Trip saved to Firestore";
+        notice.classList.remove("hidden");
+        setTimeout(() => notice.classList.add("hidden"), 2500);
+      } catch (err) {
+        handleFirestoreError(err, "create", path);
+      }
+    };
+
+    // PWA Install prompt
+    let deferredInstallPrompt = null;
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      document.getElementById("pwa-install-btn").classList.remove("hidden");
+    });
+    document.getElementById("pwa-install-btn").onclick = async () => {
+      if (!deferredInstallPrompt) return;
+      await deferredInstallPrompt.prompt();
+      deferredInstallPrompt = null;
+      document.getElementById("pwa-install-btn").classList.add("hidden");
+    };
+
+    // Navigation switching
+    function setView(view) {
+      state.view = view;
+      document.querySelectorAll("[data-view]").forEach((el) => {
+        el.classList.toggle("active", el.dataset.view === view);
+      });
+      const showMain = view === "cockpit" || view === "windows";
+      document.getElementById("cockpit-windows-container").classList.toggle("hidden", !showMain);
+      document.getElementById("trips-view").classList.toggle("hidden", view !== "trips");
+      document.getElementById("android-view").classList.toggle("hidden", view !== "android");
+      document.getElementById("cockpit-controls").classList.toggle("hidden", view === "windows");
+      document.getElementById("map-title").textContent = view === "windows" ? "Windows Live Sync Map" : "OpenStreetMap GPS";
+      if (showMain) setTimeout(() => map.invalidateSize(), 60);
+    }
+    document.querySelectorAll("[data-view]").forEach((el) => {
+      el.onclick = () => setView(el.dataset.view);
+    });
+    document.getElementById("brand-btn").onclick = () => setView("cockpit");
+
+    // Auth Modal & Firebase Auth (Email/Password + Google)
+    const authModal = document.getElementById("auth-modal");
+    const openAuth = () => authModal.classList.remove("hidden");
+    document.getElementById("auth-close-btn").onclick = () => authModal.classList.add("hidden");
+    document.getElementById("connect-cta-btn").onclick = openAuth;
+    document.getElementById("header-auth-btn").onclick = () => {
+      if (state.user && state.user.emailVerified) signOut(auth);
+      else openAuth();
+    };
+    document.getElementById("auth-tab-signin").onclick = () => {
+      state.authMode = "signin";
+      document.getElementById("auth-tab-signin").classList.add("active-light");
+      document.getElementById("auth-tab-signup").classList.remove("active-light");
+      document.getElementById("auth-submit-btn").textContent = "Sign In with Email";
+    };
+    document.getElementById("auth-tab-signup").onclick = () => {
+      state.authMode = "signup";
+      document.getElementById("auth-tab-signup").classList.add("active-light");
+      document.getElementById("auth-tab-signin").classList.remove("active-light");
+      document.getElementById("auth-submit-btn").textContent = "Create Account";
+    };
+    document.getElementById("auth-google-btn").onclick = async () => {
+      try {
+        await signInWithPopup(auth, googleProvider);
+        authModal.classList.add("hidden");
+      } catch (err) {
+        const msg = document.getElementById("auth-error-msg");
+        msg.textContent = err.message; msg.classList.remove("hidden");
+      }
+    };
+    document.getElementById("auth-form").onsubmit = async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("auth-email").value.trim();
+      const password = document.getElementById("auth-password").value;
+      const errEl = document.getElementById("auth-error-msg");
+      const infoEl = document.getElementById("auth-info-msg");
+      errEl.classList.add("hidden"); infoEl.classList.add("hidden");
+      try {
+        if (state.authMode === "signin") {
+          await signInWithEmailAndPassword(auth, email, password);
+          authModal.classList.add("hidden");
+        } else {
+          const cred = await createUserWithEmailAndPassword(auth, email, password);
+          await sendEmailVerification(cred.user);
+          infoEl.textContent = "Account created! Verification email sent — check your inbox then click I Verified.";
+          infoEl.classList.remove("hidden");
+        }
+      } catch (err) {
+        errEl.textContent = err.message; errEl.classList.remove("hidden");
+      }
+    };
+    document.getElementById("verify-resend-btn").onclick = () => state.user && sendEmailVerification(state.user);
+    document.getElementById("verify-check-btn").onclick = async () => {
+      if (!state.user) return;
+      await reload(state.user);
+      location.reload();
+    };
+
+    let unsubVehicle = null, unsubTrips = null;
+    onAuthStateChanged(auth, (user) => {
+      state.user = user;
+      if (unsubVehicle) { unsubVehicle(); unsubVehicle = null; }
+      if (unsubTrips) { unsubTrips(); unsubTrips = null; }
+
+      const verified = Boolean(user && user.emailVerified);
+      const authBtn = document.getElementById("header-auth-btn");
+      authBtn.textContent = verified
+        ? `Sign Out · ${(user.displayName || user.email || "User").split(/[@ ]/)[0]}`
+        : user ? "Verify Email" : "Sign In";
+      authBtn.className = verified ? "btn btn-secondary" : "btn btn-primary";
+
+      document.getElementById("verify-banner").classList.toggle("hidden", !user || verified);
+      document.getElementById("connect-cta").classList.toggle("hidden", verified);
+      document.getElementById("save-trip-btn").disabled = !verified;
+
+      if (!verified) {
+        document.getElementById("sync-label").textContent = "Local Preview";
+        return;
+      }
+
+      document.getElementById("sync-label").textContent = "Firebase Connected";
+      const vehPath = `users/${user.uid}/vehicles/charger-01`;
+      unsubVehicle = onSnapshot(doc(db, "users", user.uid, "vehicles", "charger-01"), (snap) => {
+        state.vehicleExists = snap.exists();
+        if (!snap.exists()) return;
+        const d = snap.data();
+        state.remoteTelemetry = {
+          speedMph: Number(d.speedMph || 0),
+          rpm: Number(d.rpm || 780),
+          peakSpeedMph: Number(d.peakSpeedMph || 0),
+          tripDistanceMiles: Number(d.tripDistanceMiles || 0),
+          lat: Number(d.latitude || state.lat),
+          lng: Number(d.longitude || state.lng),
+          heading: Number(d.heading || 0),
+          driveMode: d.driveMode || "track",
+          isTracking: Boolean(d.isTracking)
+        };
+        if (state.sourceMode === "idle") {
+          updateMapPosition(state.remoteTelemetry.lat, state.remoteTelemetry.lng, state.remoteTelemetry.heading);
+        }
+      }, (err) => handleFirestoreError(err, "get", vehPath));
+
+      const tripsPath = `users/${user.uid}/vehicles/charger-01/trips`;
+      unsubTrips = onSnapshot(query(collection(db, "users", user.uid, "vehicles", "charger-01", "trips"), orderBy("createdAt", "desc"), limit(25)), (snap) => {
+        document.getElementById("trips-count").textContent = `${snap.size} recorded`;
+        document.getElementById("trips-empty").classList.toggle("hidden", snap.size > 0);
+        document.getElementById("trips-table-wrap").classList.toggle("hidden", snap.size === 0);
+        const tbody = document.getElementById("trips-tbody");
+        tbody.innerHTML = "";
+        snap.forEach((docSnap) => {
+          const t = docSnap.data();
+          const tr = document.createElement("tr");
+          const tdLabel = document.createElement("td");
+          const strong = document.createElement("strong");
+          strong.textContent = String(t.label || "Drive Session");
+          tdLabel.appendChild(strong);
+          const tdMode = document.createElement("td");
+          tdMode.style.textTransform = "capitalize";
+          tdMode.textContent = String(t.driveMode || "track");
+          const tdMax = document.createElement("td");
+          tdMax.className = "tabular";
+          tdMax.style.color = "#FB7185";
+          tdMax.textContent = `${Math.round(Number(t.maxSpeedMph || 0))} MPH`;
+          const tdDist = document.createElement("td");
+          tdDist.className = "tabular";
+          tdDist.textContent = `${Number(t.distanceMiles || 0).toFixed(2)} mi`;
+          const tdDur = document.createElement("td");
+          tdDur.className = "tabular";
+          tdDur.textContent = `${Number(t.durationSeconds || 0)}s`;
+          const tdAct = document.createElement("td");
+          const delBtn = document.createElement("button");
+          delBtn.type = "button";
+          delBtn.className = "btn btn-secondary";
+          delBtn.style.minHeight = "32px";
+          delBtn.style.padding = "0 10px";
+          delBtn.textContent = "Delete";
+          delBtn.onclick = () => deleteDoc(docSnap.ref);
+          tdAct.appendChild(delBtn);
+          tr.append(tdLabel, tdMode, tdMax, tdDist, tdDur, tdAct);
+          tbody.appendChild(tr);
+        });
+      }, (err) => handleFirestoreError(err, "list", tripsPath));
+    });
+
+    // Optional Native Android Kotlin code viewer
+    const kotlinSnippet = [
+      "// 1. app/build.gradle.kts",
+      "implementation(\"org.osmdroid:osmdroid-android:6.1.20\")",
+      "implementation(\"com.google.android.gms:play-services-location:21.3.0\")",
+      "implementation(platform(\"com.google.firebase:firebase-bom:33.10.0\"))",
+      "implementation(\"com.google.firebase:firebase-auth-ktx\")",
+      "implementation(\"com.google.firebase:firebase-firestore-ktx\")",
+      "",
+      "// 2. DodgeChargerSpeedometer.kt (Jetpack Compose Canvas 0..200 MPH Dial)",
+      "// Draws brushed gunmetal bezel, 270-deg sweep, redline zone (160..200), crimson needle,",
+      "// and EVIC digital readout with Street / Sport / Track accent modes.",
+      "",
+      "// 3. MainActivity.kt (OSMdroid OpenStreetMap + FusedLocationProviderClient + Firestore)",
+      "// Firestore Database ID: ai-studio-6cb63ac0-7479-41a5-ac43-367fed264752",
+      "// Document Path: users/{uid}/vehicles/charger-01",
+      "// Streams speedMph (loc.speed * 2.23694f), latitude, longitude, heading, and peakSpeedMph",
+      "// in real time to the exact same Firestore document watched by Windows Map."
+    ].join("\n");
+    document.getElementById("kotlin-code-block").textContent = kotlinSnippet;
+    document.getElementById("copy-kotlin-btn").onclick = async () => {
+      await navigator.clipboard.writeText(kotlinSnippet);
+      document.getElementById("copy-kotlin-btn").textContent = "Copied";
+      setTimeout(() => (document.getElementById("copy-kotlin-btn").textContent = "Copy Kotlin"), 1600);
+    };
+  </script>
+</body>
+</html>

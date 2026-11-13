@@ -1,0 +1,203 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidDriveMode(mode) {
+      return mode is string && (mode == 'street' || mode == 'sport' || mode == 'track');
+    }
+
+    function isValidUnit(unit) {
+      return unit is string && (unit == 'mph' || unit == 'kmh');
+    }
+
+    function isValidVehicleFields(data, userId) {
+      return data.ownerId is string
+        && data.ownerId == userId
+        && data.ownerId.size() <= 128
+        && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.vehicleName is string
+        && data.vehicleName.size() >= 1
+        && data.vehicleName.size() <= 64
+        && isValidDriveMode(data.driveMode)
+        && isValidUnit(data.unit)
+        && (data.speedMph is int || data.speedMph is float)
+        && data.speedMph >= 0 && data.speedMph <= 250
+        && (data.rpm is int || data.rpm is float)
+        && data.rpm >= 0 && data.rpm <= 8000
+        && (data.latitude is int || data.latitude is float)
+        && data.latitude >= -90 && data.latitude <= 90
+        && (data.longitude is int || data.longitude is float)
+        && data.longitude >= -180 && data.longitude <= 180
+        && (data.heading is int || data.heading is float)
+        && data.heading >= 0 && data.heading <= 360
+        && (data.altitudeMeters is int || data.altitudeMeters is float)
+        && data.altitudeMeters >= -500 && data.altitudeMeters <= 15000
+        && (data.accuracyMeters is int || data.accuracyMeters is float)
+        && data.accuracyMeters >= 0 && data.accuracyMeters <= 5000
+        && (data.peakSpeedMph is int || data.peakSpeedMph is float)
+        && data.peakSpeedMph >= 0 && data.peakSpeedMph <= 250
+        && (data.tripDistanceMiles is int || data.tripDistanceMiles is float)
+        && data.tripDistanceMiles >= 0 && data.tripDistanceMiles <= 100000
+        && data.isTracking is bool
+        && data.sourceDevice is string
+        && data.sourceDevice.size() >= 1
+        && data.sourceDevice.size() <= 32
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidVehicleCreate(data, userId) {
+      return data.keys().hasAll([
+          'ownerId', 'vehicleName', 'driveMode', 'unit', 'speedMph', 'rpm',
+          'latitude', 'longitude', 'heading', 'altitudeMeters', 'accuracyMeters',
+          'peakSpeedMph', 'tripDistanceMiles', 'isTracking', 'sourceDevice',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'vehicleName', 'driveMode', 'unit', 'speedMph', 'rpm',
+          'latitude', 'longitude', 'heading', 'altitudeMeters', 'accuracyMeters',
+          'peakSpeedMph', 'tripDistanceMiles', 'isTracking', 'sourceDevice',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidVehicleFields(data, userId)
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    function isTelemetryUpdateAction() {
+      return incoming().diff(existing()).affectedKeys().hasOnly([
+        'speedMph', 'rpm', 'latitude', 'longitude', 'heading',
+        'altitudeMeters', 'accuracyMeters', 'peakSpeedMph',
+        'tripDistanceMiles', 'isTracking', 'sourceDevice', 'updatedAt'
+      ]);
+    }
+
+    function isSettingsUpdateAction() {
+      return incoming().diff(existing()).affectedKeys().hasOnly([
+        'vehicleName', 'driveMode', 'unit', 'peakSpeedMph',
+        'tripDistanceMiles', 'updatedAt'
+      ]);
+    }
+
+    function isValidTrip(data, userId, vehicleId) {
+      return data.keys().hasAll([
+          'ownerId', 'vehicleId', 'label', 'driveMode', 'maxSpeedMph',
+          'avgSpeedMph', 'distanceMiles', 'durationSeconds', 'startLat',
+          'startLng', 'endLat', 'endLng', 'routePoints', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'vehicleId', 'label', 'driveMode', 'maxSpeedMph',
+          'avgSpeedMph', 'distanceMiles', 'durationSeconds', 'startLat',
+          'startLng', 'endLat', 'endLng', 'routePoints', 'createdAt'
+        ])
+        && data.ownerId is string
+        && data.ownerId == userId
+        && data.ownerId.size() <= 128
+        && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.vehicleId is string
+        && data.vehicleId == vehicleId
+        && data.vehicleId.size() <= 128
+        && data.vehicleId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.label is string
+        && data.label.size() >= 1
+        && data.label.size() <= 80
+        && isValidDriveMode(data.driveMode)
+        && (data.maxSpeedMph is int || data.maxSpeedMph is float)
+        && data.maxSpeedMph >= 0 && data.maxSpeedMph <= 250
+        && (data.avgSpeedMph is int || data.avgSpeedMph is float)
+        && data.avgSpeedMph >= 0 && data.avgSpeedMph <= 250
+        && (data.distanceMiles is int || data.distanceMiles is float)
+        && data.distanceMiles >= 0 && data.distanceMiles <= 10000
+        && (data.durationSeconds is int || data.durationSeconds is float)
+        && data.durationSeconds >= 0 && data.durationSeconds <= 864000
+        && (data.startLat is int || data.startLat is float)
+        && data.startLat >= -90 && data.startLat <= 90
+        && (data.startLng is int || data.startLng is float)
+        && data.startLng >= -180 && data.startLng <= 180
+        && (data.endLat is int || data.endLat is float)
+        && data.endLat >= -90 && data.endLat <= 90
+        && (data.endLng is int || data.endLng is float)
+        && data.endLng >= -180 && data.endLng <= 180
+        && data.routePoints is list
+        && data.routePoints.size() <= 60
+        && (
+          data.routePoints.size() == 0 ||
+          (
+            data.routePoints[0] is map
+            && (data.routePoints[0].lat is int || data.routePoints[0].lat is float)
+            && (data.routePoints[0].lng is int || data.routePoints[0].lng is float)
+          )
+        )
+        && data.createdAt is timestamp
+        && data.createdAt == request.time;
+    }
+
+    match /users/{userId}/vehicles/{vehicleId} {
+      allow get: if isValidId(userId) && isValidId(vehicleId) && isOwner(userId);
+      allow list: if isOwner(userId) && resource.data.ownerId == request.auth.uid;
+      allow create: if isValidId(userId)
+        && isValidId(vehicleId)
+        && isOwner(userId)
+        && isValidVehicleCreate(incoming(), userId);
+      allow update: if isValidId(userId)
+        && isValidId(vehicleId)
+        && isOwner(userId)
+        && isValidVehicleFields(incoming(), userId)
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (isTelemetryUpdateAction() || isSettingsUpdateAction());
+      allow delete: if isValidId(userId) && isValidId(vehicleId) && isOwner(userId);
+
+      match /trips/{tripId} {
+        allow get: if isValidId(userId)
+          && isValidId(vehicleId)
+          && isValidId(tripId)
+          && isOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId))
+          && get(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId)).data.ownerId == request.auth.uid;
+        allow list: if isOwner(userId) && resource.data.ownerId == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(vehicleId)
+          && isValidId(tripId)
+          && isOwner(userId)
+          && isValidTrip(incoming(), userId, vehicleId)
+          && exists(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId))
+          && get(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId)).data.ownerId == request.auth.uid;
+        allow update: if false;
+        allow delete: if isValidId(userId)
+          && isValidId(vehicleId)
+          && isValidId(tripId)
+          && isOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId))
+          && get(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId)).data.ownerId == request.auth.uid;
+      }
+    }
+  }
+}

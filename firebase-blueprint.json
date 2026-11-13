@@ -1,0 +1,212 @@
+{
+  "entities": {
+    "VehicleTelemetry": {
+      "title": "VehicleTelemetry",
+      "description": "Real-time Dodge Charger cockpit telemetry synchronized between Android and Windows via Firestore.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Authenticated Firebase UID of the vehicle owner."
+        },
+        "vehicleName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Custom display label for the connected vehicle."
+        },
+        "driveMode": {
+          "type": "string",
+          "enum": ["street", "sport", "track"],
+          "description": "Active Dodge Charger cluster drive mode."
+        },
+        "unit": {
+          "type": "string",
+          "enum": ["mph", "kmh"],
+          "description": "Speedometer display unit."
+        },
+        "speedMph": {
+          "type": "number",
+          "description": "Current speed in miles per hour (0 to 250)."
+        },
+        "rpm": {
+          "type": "number",
+          "description": "Calculated or simulated engine RPM (0 to 8000)."
+        },
+        "latitude": {
+          "type": "number",
+          "description": "Current WGS84 latitude."
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Current WGS84 longitude."
+        },
+        "heading": {
+          "type": "number",
+          "description": "Compass heading in degrees (0 to 360)."
+        },
+        "altitudeMeters": {
+          "type": "number",
+          "description": "GPS altitude in meters."
+        },
+        "accuracyMeters": {
+          "type": "number",
+          "description": "Horizontal GPS accuracy in meters."
+        },
+        "peakSpeedMph": {
+          "type": "number",
+          "description": "Session top speed recorded in MPH."
+        },
+        "tripDistanceMiles": {
+          "type": "number",
+          "description": "Accumulated active trip distance in miles."
+        },
+        "isTracking": {
+          "type": "boolean",
+          "description": "Whether the Android transmitter is actively streaming GPS telemetry."
+        },
+        "sourceDevice": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "description": "Identifier for the active telemetry transmitter."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when vehicle telemetry doc was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the latest telemetry update."
+        }
+      },
+      "required": [
+        "ownerId",
+        "vehicleName",
+        "driveMode",
+        "unit",
+        "speedMph",
+        "rpm",
+        "latitude",
+        "longitude",
+        "heading",
+        "altitudeMeters",
+        "accuracyMeters",
+        "peakSpeedMph",
+        "tripDistanceMiles",
+        "isTracking",
+        "sourceDevice",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "TripLog": {
+      "title": "TripLog",
+      "description": "Immutable completed drive summary with sampled GPS route waypoints.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Authenticated Firebase UID of the owner."
+        },
+        "vehicleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Parent vehicle document ID."
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Trip title or route summary."
+        },
+        "driveMode": {
+          "type": "string",
+          "enum": ["street", "sport", "track"],
+          "description": "Drive mode used during the trip."
+        },
+        "maxSpeedMph": {
+          "type": "number",
+          "description": "Top speed reached during the trip in MPH."
+        },
+        "avgSpeedMph": {
+          "type": "number",
+          "description": "Average speed during the trip in MPH."
+        },
+        "distanceMiles": {
+          "type": "number",
+          "description": "Total distance covered in miles."
+        },
+        "durationSeconds": {
+          "type": "number",
+          "description": "Elapsed drive duration in seconds."
+        },
+        "startLat": {
+          "type": "number",
+          "description": "Trip origin latitude."
+        },
+        "startLng": {
+          "type": "number",
+          "description": "Trip origin longitude."
+        },
+        "endLat": {
+          "type": "number",
+          "description": "Trip destination latitude."
+        },
+        "endLng": {
+          "type": "number",
+          "description": "Trip destination longitude."
+        },
+        "routePoints": {
+          "type": "array",
+          "description": "Up to 60 sampled {lat, lng} GPS breadcrumb points."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the trip log was saved."
+        }
+      },
+      "required": [
+        "ownerId",
+        "vehicleId",
+        "label",
+        "driveMode",
+        "maxSpeedMph",
+        "avgSpeedMph",
+        "distanceMiles",
+        "durationSeconds",
+        "startLat",
+        "startLng",
+        "endLat",
+        "endLng",
+        "routePoints",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/vehicles/{vehicleId}": {
+      "schema": {
+        "$ref": "#/entities/VehicleTelemetry"
+      },
+      "description": "Live vehicle telemetry state synced from Android device to Windows dashboard."
+    },
+    "/users/{userId}/vehicles/{vehicleId}/trips/{tripId}": {
+      "schema": {
+        "$ref": "#/entities/TripLog"
+      },
+      "description": "Completed trip logs belonging to a specific vehicle."
+    }
+  }
+}
